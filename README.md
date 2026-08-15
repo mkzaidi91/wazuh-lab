@@ -69,6 +69,26 @@ New md5sum is: 'fb79c867483c4908f2daeb017cc6752e'
 
 Wazuh also auto-mapped the event to relevant compliance controls (GDPR II_5.1.f, HIPAA 164.312.c.1/c.2), which is a reminder that FIM isn't just a detection mechanism — it's a control that shows up by name in most regulatory frameworks, which is part of why it's a standard requirement in enterprise security rather than an optional nice-to-have.
 
+## Detection: Custom Correlation Rule (Mass File Modification)
+
+To go beyond using Wazuh's default ruleset, I wrote a custom correlation rule that escalates when multiple file integrity events occur in a short window — the kind of pattern ransomware or a compromised account rewriting many files quickly would produce.
+
+**Rule logic:** if 5+ FIM events (rule 550) fire within 120 seconds, escalate to a level 12 alert mapped to MITRE ATT&CK T1486 (Data Encrypted for Impact).
+
+### Debugging the rule: from "should work" to actually working
+
+The rule initially did not fire, despite generating clean test data well within the configured window. Rather than guess, I isolated the cause step by step:
+
+1. **Validated the rule syntax directly against the Manager's engine** using `wazuh-logtest`, feeding the exact log line that generates rule 550 multiple times in a controlled session. The rule fired correctly here, confirming the XML and correlation logic itself were valid.
+2. **Ruled out common false leads** one at a time: `same_field`/`same_source_ip` conditions on unpopulated fields, `if_matched_group` vs `if_matched_sid` syntax differences, config reload timing, and incomplete test runs (an early test loop was silently interrupted mid-run by SSH's password-retry behavior, producing fewer events than intended).
+3. **Compared against Wazuh's own built-in frequency rules** (e.g., rule 5712) to confirm the syntax pattern matched a known-working template.
+4. **Found the actual root cause**: `analysisd.rule_matching_threads` was set to `0` (auto), which scales rule matching across multiple parallel threads based on CPU count. Frequency/timeframe correlation state is tracked per-thread, not globally — so events landing on different threads never accumulated toward the same counter, even though they were clustered within the configured window in wall-clock time.
+5. **Fix**: set `analysisd.rule_matching_threads=1` in `local_internal_options.conf`, forcing single-threaded rule matching so correlation state stays consistent. Retested live and confirmed the rule fired correctly.
+
+![Custom Rule Detection](docs/images/custom-rule-detection.png)
+
+This was a more valuable exercise than a rule that worked on the first try — multi-threaded correlation fragmentation is a real, documented category of SIEM tuning issue, and working through it required understanding Wazuh's internals (decoding → rule matching → frequency tracking) rather than just its UI.
+
 ## Lessons Learned
 
 - SIEM detection testing requires understanding the full authentication chain (key vs. password auth), not just triggering a "failed login" at face value
@@ -78,6 +98,6 @@ Wazuh also auto-mapped the event to relevant compliance controls (GDPR II_5.1.f,
 ## Next Steps
 
 - [x] Configure File Integrity Monitoring (FIM) on key infrastructure paths
-- [ ] Write a custom detection rule
+- [x] Write a custom detection rule
 - [ ] Enable vulnerability detection module
 - [ ] Add a second agent
