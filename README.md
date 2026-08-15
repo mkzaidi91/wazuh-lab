@@ -44,6 +44,31 @@ The individual failed attempts were logged at level 5, and Wazuh's correlation e
 
 ![Brute-Force Detection - Event Detail](docs/images/events-detail.png)
 
+## Detection: File Integrity Monitoring (FIM)
+
+To extend detection coverage beyond authentication events, I configured File Integrity Monitoring on high-value paths: `/etc/passwd`, `/etc/shadow`, `/etc/ssh/sshd_config`, and this project's own infrastructure repository (`homelab-config`).
+
+**Configuration:** By default, Wazuh's agent monitors broad system directories (`/etc`, `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`, `/boot`) on a 12-hour scan interval, reporting only that a change occurred. I added a second, more targeted layer on top of this: real-time monitoring (`realtime="yes"`) with full diff reporting (`report_changes="yes"`) scoped specifically to the paths above, so that changes to these specific files are detected immediately and with full detail, rather than waiting up to 12 hours for a generic "something changed" alert.
+
+**Test:** Appended a comment line to `homelab-config/README.md` and confirmed detection end-to-end.
+
+![FIM Detection - Event List](docs/images/fim-detection-list.png)
+
+Wazuh detected the change within seconds (real-time mode) and generated rule 550 ("Integrity checksum changed"). Drilling into the event shows the full diff Wazuh captured:
+
+```
+File '/home/iso/homelab-config/README.md' modified
+Mode: realtime
+Changed attributes: size,mtime,md5,sha1,sha256
+Size changed from '2859' to '2910'
+Old md5sum was: 'cf6603e6e820bdc357b4c81f9fa73f97'
+New md5sum is: 'fb79c867483c4908f2daeb017cc6752e'
+```
+
+![FIM Detection - Event Detail](docs/images/fim-detection-detail.png)
+
+Wazuh also auto-mapped the event to relevant compliance controls (GDPR II_5.1.f, HIPAA 164.312.c.1/c.2), which is a reminder that FIM isn't just a detection mechanism — it's a control that shows up by name in most regulatory frameworks, which is part of why it's a standard requirement in enterprise security rather than an optional nice-to-have.
+
 ## Lessons Learned
 
 - SIEM detection testing requires understanding the full authentication chain (key vs. password auth), not just triggering a "failed login" at face value
@@ -52,7 +77,7 @@ The individual failed attempts were logged at level 5, and Wazuh's correlation e
 
 ## Next Steps
 
-- [ ] Configure File Integrity Monitoring (FIM) on key infrastructure paths
+- [x] Configure File Integrity Monitoring (FIM) on key infrastructure paths
 - [ ] Write a custom detection rule
 - [ ] Enable vulnerability detection module
 - [ ] Add a second agent
