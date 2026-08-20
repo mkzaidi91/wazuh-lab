@@ -119,9 +119,17 @@ After restarting the Wazuh agent to force a fresh package inventory sync, a foll
 
 ![libavcodec60 findings after remediation](docs/images/vuln-libavcodec60-after.png)
 
+## Multi-Agent Monitoring
+
+Extended monitoring coverage by deploying a second Wazuh agent on the Manager's own host (wazuhlab), which previously had no visibility into itself. Both agents report as active and connected.
+
+![Second Agent Deployed](docs/images/second-agent-deployed.png)
+
+This also sets up the environment for testing cross-host correlation logic in future work — detections that require matching activity across multiple monitored systems (e.g., the same source IP attacking two different hosts) can't be meaningfully tested with only a single agent.
+
 ## Next Steps
 
 - [x] Configure File Integrity Monitoring (FIM) on key infrastructure paths
 - [x] Write a custom detection rule
 - [x] Enable vulnerability detection module
-- [ ] Add a second agent
+- [x] Add a second agent
