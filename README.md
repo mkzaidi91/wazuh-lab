@@ -95,9 +95,33 @@ This was a more valuable exercise than a rule that worked on the first try — m
 - Correlation rules (like 2502) provide meaningfully higher-fidelity signal than individual auth-failure events, which is why tuning and understanding rule escalation logic matters as much as deploying the tool itself
 - First-boot timing issues between distributed components (Indexer vs. Dashboard) are a normal part of deploying multi-container security tooling, not a misconfiguration
 
+## Vulnerability Detection & Remediation
+
+Wazuh's vulnerability detection module scans installed packages on the agent against known CVE databases. On first scan, it identified 2,085 vulnerabilities across the monitored host, including 165 rated Critical and 1,042 rated High.
+
+![Vulnerability Dashboard Overview](docs/images/vuln-dashboard-overview.png)
+
+A large share of the highest-severity findings traced back to a single outdated package: libavcodec60 (part of the FFmpeg library used by Jellyfin for video transcoding), running version 7:6.1.1-3ubuntu5 with multiple known CVEs spanning 2023-2025, including CVE-2023-49501 (High, buffer overflow).
+
+![libavcodec60 findings before remediation](docs/images/vuln-libavcodec60-before.png)
+
+### Remediation: from "no fix available" to a real patch
+
+Checking for an update the standard way showed no fix available: installed and candidate versions were identical. Rather than treating this as a dead end, I checked Ubuntu's own security notices directly and found that a fix does exist (USN-6803-1), but it's gated behind Ubuntu Pro's ESM channel rather than the standard free repositories. Ubuntu Pro is free for personal use on up to 5 machines, so I attached this host to a free Ubuntu Pro subscription and enabled esm-apps to access the patch.
+
+Unplanned detour: enabling ESM and running apt update initially failed with "No space left on device" — the host's root filesystem was completely full, which was also silently blocking normal apt operations entirely. Investigated disk usage and found several gigabytes of already-imported media duplicated in a downloads staging folder; clearing verified-duplicate files freed enough space to proceed.
+
+With space freed and ESM enabled, the patched version became available and installable.
+
+### Verification
+
+After restarting the Wazuh agent to force a fresh package inventory sync, a follow-up scan confirmed the finding cleared:
+
+![libavcodec60 findings after remediation](docs/images/vuln-libavcodec60-after.png)
+
 ## Next Steps
 
 - [x] Configure File Integrity Monitoring (FIM) on key infrastructure paths
 - [x] Write a custom detection rule
-- [ ] Enable vulnerability detection module
+- [x] Enable vulnerability detection module
 - [ ] Add a second agent
